@@ -25,7 +25,7 @@
 
 //****CONSTANTES
 
-#define NBR_VOITURES 10    // Nombre de voitures dans la course
+#define NBR_VOITURES 20  // Nombre de voitures dans la course
 #define NBR_TOUR 10  // Nombre de tours dans la course
 #define MIN_TEMPS_SECTEUR 25000  // Temps minimum pour un secteur en millisecondes
 #define MAX_TEMPS_SECTEUR 45000
@@ -33,7 +33,6 @@
 #define TOTAL_PARC 305000        // Longueur totale du circuit
 #define NOM_FICHIER "essaie-libre.csv"
 #define MAX_TOURS 10  // Nombre maximal de tours
-#define SEM_KEY 5432
 #define NBR_VOITURES_MAX 20 // Capacité maximale pour les qualifications
 
 #define MIN_TEMPS_PIT 2000 
@@ -91,7 +90,7 @@ long getMin(long a, long b, long c);
 long genererTempsSecteur(int min, int max, int longueurSecteur, int longueurSecteurRef);
 char genererEtatVoiture();
 void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSectRef);
-void simulateQualification(Voiture *voitures, int nbrVoitures, int *voituresRestantes, int t);
+void simulateQualification(Voiture *voiture, int nbrVoitures, int *voituresRestantes, int t);
 
 
 
@@ -102,7 +101,7 @@ char *convertiTemps(int tempsEnMms);
 char* intToChar_deux(int nombre);
 //void enregistrerTourVoiture(Voiture *voiture, int tourNum, char *nomFichier);
 void ajouterEnTetesCSV(char *nomFichier);
-void afficherTableau(Voiture *copie, int nbVoitures);
+void afficherTableau(Voiture *voiture, int nbVoitures);
 void initialiserVoitures(Voiture *voitures, int nbrVoitures);
 
 //void trierVoituresParTemps(Voiture *copie);

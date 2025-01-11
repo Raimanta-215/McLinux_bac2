@@ -127,13 +127,26 @@ void elimination(Voiture *voitures, int *nbVoitures) {
     *nbVoitures = (*nbVoitures > 5) ? *nbVoitures - 5 : 0;
 }
 
-void afficherTableau(Voiture *copie, int nbVoitures) {
-    //system("clear");
+
+
+
+/////////////////////////////////////////////////////////////////:::::
+
+//AFFICHAGE
+
+void afficherTableau(Voiture *voiture, int nbVoitures) {
+    system("clear");
+
+    Voiture copie[NBR_VOITURES];
+
+
+    memcpy(copie, voiture, sizeof(Voiture)*NBR_VOITURES);
+
 
     qsort(copie, nbVoitures, sizeof(Voiture), comparerVoituresParTour);
 
     // Identifier le leader pour les écarts
-    int tempsLeader = copie[0].tempTotal;
+    int tempsLeader = copie[0].secteur[0] + copie[0].secteur[1] + copie[0].secteur[2];
 
     // Affichage du tableau
     printf("╔════╦═══════════╦════════╦═════════════╦══════════════════╦════════╦════════════════╗\n");
@@ -141,8 +154,11 @@ void afficherTableau(Voiture *copie, int nbVoitures) {
     printf("╠════╬═══════════╬════════╬═════════════╬══════════════════╬════════╬════════════════╣\n");
 
     for (int i = 0; i < nbVoitures; i++) {
+        // Calcul du temps pour un tour à partir des secteurs
+        int tempsLap = copie[i].secteur[0] + copie[i].secteur[1] + copie[i].secteur[2];
+        char *tempsLapStr = convertiTemps(tempsLap);
+
         // Convertir les temps pour l'affichage
-        char *tempsTotalStr = convertiTemps(copie[i].tempTotal);
         char *meilleurSecteurStr = convertiTemps(
             copie[i].bestSecteur[0] < copie[i].bestSecteur[1] && copie[i].bestSecteur[0] < copie[i].bestSecteur[2]
             ? copie[i].bestSecteur[0]
@@ -150,7 +166,7 @@ void afficherTableau(Voiture *copie, int nbVoitures) {
                ? copie[i].bestSecteur[1]
                : copie[i].bestSecteur[2]));
 
-        int ecartTemps = copie[i].tempTotal - tempsLeader;
+        int ecartTemps = tempsLap - tempsLeader;
         char *ecartStr = convertiTemps(ecartTemps);
 
         char *etatStr;
@@ -173,13 +189,13 @@ void afficherTableau(Voiture *copie, int nbVoitures) {
                i + 1,
                copie[i].num,
                copie[i].tour,
-               tempsTotalStr,
+               tempsLapStr,
                meilleurSecteurStr,
                etatStr,
                ecartStr);
 
         // Libération de mémoire
-        free(tempsTotalStr);
+        free(tempsLapStr);
         free(meilleurSecteurStr);
         free(ecartStr);
     }

@@ -1,4 +1,6 @@
 #include "header.h"
+#include <errno.h>
+
 
 
 //****** SIMULATION VOITURE
@@ -6,10 +8,11 @@
 
 sem_t mutex;            // Pour synchroniser l'accès à la sortie
 sem_t mutlect;          // Pour indiquer si une voiture écrit
+#define TEMPS_COURSE 600
 int red_count = 0;  // Nombre de lecteurs en cours
-#define TEMPS_COURSE 20
 
 void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSectRef) {
+
 
     voiture->status = 0; // En course
     voiture->tour = 0;   // Premier tour
@@ -23,7 +26,7 @@ void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSect
         voiture->bestSecteur[i] = 0;
     }
       
-    while(voiture->tempTotal < TEMPS_COURSE){ //tant que la voiture a pas fini son temsps de course
+    while(1){ //tant que la voiture a pas fini son temsps de course
         
         sem_wait(&mutex); //les red attendent que le père lise pas
         
@@ -46,8 +49,6 @@ void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSect
         if (random < 7 || (voiture->tour > 0 && voiture->out == 1)) {
             voiture->status = 2; // Crash
             voiture->out = 1;
-            printf("Voiture %d a crashé au tour %d.\n", voiture->num, voiture->tour);
-            return; // Terminer la simulation pour cette voiture
         } else if (random < 25) {
             voiture->status = 1; // Arrêt au stand
             voiture->stand = 1;
@@ -75,10 +76,7 @@ void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSect
         // Ajout du temps d'arrêt au stand s'il y a un arrêt
         if (voiture->stand == 1) {
             int pitTime = genererTempsSecteur(MIN_TEMPS_PIT, MAX_TEMPS_PIT, lgSect, lgSectRef);
-            lapTime += pitTime;
-            voiture->stand == 0;
-            voiture->status == 0; //retour dans la course
-        }
+            lapTime += pitTime;}
 
         voiture->tempTotal += lapTime; // Mise à jour du temps total
         //printf("id voidture %d et la e temps total %d\n", voiture->num, voiture->tempTotal);
@@ -88,7 +86,6 @@ void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSect
             voiture->bestLap = lapTime;
         }
 
-        printf("ici c'est la voiture %d qui ecrit, statut V %d\n", voiture->num, voiture->status);
 //////////////////////////////////////////////////////////////////////////////////
         sem_wait(&mutex); // le red fini 
         red_count--;// décrémente 
@@ -97,7 +94,7 @@ void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSect
 
         sem_post(&mutex);  // les red peuvent se réveiller
 
-        sleep(2);
+        sleep(1);
     }
 }
 
@@ -108,8 +105,8 @@ void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSect
 
 
 
-void simulateQualification(Voiture *voitures, int nbrVoitures, int *voituresRestantes, int t){
-    *voituresRestantes = nbrVoitures;
+void simulateQualification(Voiture *voitures, int nbrVOiture, int *voituresRestantes, int t){
+    *voituresRestantes = nbrVOiture;
 
     for(int qualif = 0; qualif < 3; qualif ++){
         printf("Début de D%d...\n", qualif + 1);
@@ -173,18 +170,18 @@ int main(int argc, char *argv[]) {
 ///////////////////////// INITIALISATION
 
     // Déterminer le nombre de voitures
-    int nbrVoitures = (strcmp(type_course, "qualif") == 0) ? 20 : 5;
+    //int NBR_VOITURES = (strcmp(type_course, "qualif") == 0) ? 20 : 5;
 
     printf("Configuration : Type de course = %s, Longueur du circuit = %d, Jour = %s\n",
            type_course, longueur_circuit, jour);
 
-    key_t key = ftok("f1", 1); // Générer une clé unique
+    key_t key = ftok("f1", 'X'); // Générer une clé unique
     if (key == -1) {
         perror("Erreur de génération de la clé mémoire partagée");
         return EXIT_FAILURE;
     }
     // Création de la mémoire partagée pour les voitures
-    int shmid = shmget(key, NBR_VOITURES * sizeof(Voiture), IPC_CREAT | 0666);
+    int shmid = shmget(key, NBR_VOITURES_MAX * sizeof(Voiture), IPC_CREAT | 0666);
     if (shmid == -1) {
         perror("Erreur de création de la mémoire partagée pour les voitures");
         return EXIT_FAILURE;
@@ -195,6 +192,25 @@ int main(int argc, char *argv[]) {
         perror("Erreur d'attachement à la mémoire partagée pour les voitures");
         return EXIT_FAILURE;
     }
+
+
+
+
+//&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+
+
+int shmId = shmget(key, 0, 0);  // Essayer de récupérer un segment existant
+if (shmId == -1) {
+    if (errno == ENOENT) {
+        printf("Clé %d n'est pas utilisée.\n", key);
+    } else {
+        perror("Erreur lors de la vérification de la clé");
+    }
+} else {
+    printf("Clé %d est déjà utilisée par le segment ID %d.\n", key, shmId);
+}
+
 
 ////////////////////// INIT BEST
 
@@ -222,7 +238,8 @@ int main(int argc, char *argv[]) {
     }
     
 
-    initialiserVoitures(shm, nbrVoitures);
+    initialiserVoitures(shm, NBR_VOITURES);
+
 ///////////////////////////////// VARIABLES
 
     srand(time(NULL));
@@ -234,7 +251,7 @@ int main(int argc, char *argv[]) {
 
 ////////////////////////////// FORK VOITURES REDACETEUR
 
-    for (vId = 0; vId < nbrVoitures; vId++) {
+    for (vId = 0; vId < NBR_VOITURES; vId++) {
         pid = fork();
         
         if (pid == 0) {  // Processus fils (voiture)
@@ -255,27 +272,30 @@ int main(int argc, char *argv[]) {
 
 //parking
 
+
+
+
 /////////////////// PERE LECTEUR
 
     if (pid > 0) {
 
-        while (1) {
+
 
            sem_wait(&mutlect);  // Attendre qu'il n'y ait pas d'écrivain actif
 
 ////////////////////////////////////////////////
 //SECTION CRITIQUE
-            Voiture copie[NBR_VOITURES];
-            memcpy(copie, shm, sizeof(Voiture)*NBR_VOITURES);
-
+            
             if (strcmp(type_course, "essaie") == 0) {
-                    printf("Début des essais libres...\n");
+                printf("Début des essais libres...\n");
+                time_t start = time(NULL);
+                time_t finish = start + 5;
+                while (time(NULL) < finish) {
 
-                    afficherTableau(copie, nbrVoitures);             
+                    afficherTableau(shm, NBR_VOITURES);   
+
+                sleep(1);          
             }
-
-            memset(copie, 0, sizeof(Voiture) * NBR_VOITURES); // Remettre à zéro les données de voiture
-
 
 
 
@@ -297,7 +317,7 @@ int main(int argc, char *argv[]) {
                 for (int t = 0; t < NBR_TOUR; t++){
         
                     
-                        simulateQualification(copie, nbrVoitures, &voituresRestantes, t); // Effectuer la simulation
+                        simulateQualification(copie, NBR_VOITURES, &voituresRestantes, t); // Effectuer la simulation
                         sleep(2); 
 
         }
