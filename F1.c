@@ -1,141 +1,149 @@
 #include "header.h"
 
-//****** UTILITAIRES
-
-long getMin(long a, long b, long c) {
-    long min = a;
-    if (b < min) min = b;
-    if (c < min) min = c;
-    return min;
-}
-
-//****** FONCTION TEMPS
-
-long genererTempsSecteur(int min, int max, int longueurSecteur, int longueurSecteurRef) {
-    int tempsBase = min + rand() % (max - min + 1);
-    return (long)tempsBase * longueurSecteur / longueurSecteurRef;
-}
-
-//****** FONCTION ETATS VOITURES
-
-char genererEtatVoiture() {
-    int random = rand() % 100;
-    if (random < 15) return 'O';
-    if (random < 25) return 'P';
-    return 'R';
-}
 
 //****** SIMULATION VOITURE
 
+
+sem_t mutex;            // Pour synchroniser l'accès à la sortie
+sem_t mutlect;          // Pour indiquer si une voiture écrit
+int red_count = 0;  // Nombre de lecteurs en cours
+#define TEMPS_COURSE 20
+
 void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSectRef) {
-    for (int t = 0; t < NBR_TOUR; t++) {
 
-        // Mise à jour de l'état (aléatoire pour cet exemple)
+    voiture->status = 0; // En course
+    voiture->tour = 0;   // Premier tour
+    voiture->tempTotal = 0;
+    voiture->stand = 0;
+    voiture->out = 0;
+    voiture->bestLap = 0;
+
+    for (int i = 0; i < 3; i++) {
+        voiture->secteur[i] = 0;
+        voiture->bestSecteur[i] = 0;
+    }
+      
+    while(voiture->tempTotal < TEMPS_COURSE){ //tant que la voiture a pas fini son temsps de course
+        
+        sem_wait(&mutex); //les red attendent que le père lise pas
+        
+        red_count++; //incrémente le nbr car peuvent ecrire à plsueiurs
+
+        if(red_count == 1){ //une fois que le premier est entré , le lecteur peuvent plus lire
+            sem_wait(&mutlect);
+        }
+
+        sem_post(&mutex); //les red sont reveillées
+
+///////////////////////////////////////////////////////////////////////////////////
+// SECTION CRITIQUE
+
+
         int random = rand() % 100;
-        if (random < 7 || (t > 0 && voiture->tour[t-1].etat == 'O') ) {
-            voiture->tour[t].etat = 'O'; // Abandon
-        } else if (random < 35) {
-            voiture->tour[t].etat = 'P'; // Aux stands
+        voiture->tour=voiture->tour+1; // Mise à jour du tour actuel
+
+        // Déterminer le statut de la voiture
+        if (random < 7 || (voiture->tour > 0 && voiture->out == 1)) {
+            voiture->status = 2; // Crash
+            voiture->out = 1;
+            printf("Voiture %d a crashé au tour %d.\n", voiture->num, voiture->tour);
+            return; // Terminer la simulation pour cette voiture
+        } else if (random < 25) {
+            voiture->status = 1; // Arrêt au stand
+            voiture->stand = 1;
         } else {
-            voiture->tour[t].etat = 'R'; // En course
+            voiture->status = 0; // En course
+            voiture->stand = 0;
         }
 
-        voiture->tour[t].tempsTotal = 0;
-        long tempsSecteur = 0; // Déclaré ici pour être visible partout dans la boucle
+        // Simulation des secteurs
+        int lapTime = 0;
+        for (int secteur = 0; secteur < 3; secteur++) {
+            if (voiture->out == 0) { // Si la voiture n'est pas hors course
+                voiture->secteur[secteur] = genererTempsSecteur(minT, maxT, lgSect, lgSectRef);
+                lapTime += voiture->secteur[secteur];
 
-        for (int secteur = 1; secteur <= 3; secteur++) {
-
-            tempsSecteur = 0;
-            if (voiture->tour[t].etat != 'O' )tempsSecteur = genererTempsSecteur(minT, maxT, lgSect, lgSectRef);
-            
-            if (secteur == 1) voiture->tour[t].secteur1.temps = tempsSecteur;
-            if (secteur == 2) voiture->tour[t].secteur2.temps = tempsSecteur;
-            if (secteur == 3) {
-                voiture->tour[t].secteur3.temps = tempsSecteur;
-                if (voiture->tour[t].etat == 'P') {
-                    voiture->tour[t].secteur3.temps = genererTempsSecteur(MIN_TEMPS_PIT, MAX_TEMPS_PIT, lgSect, lgSectRef);
-                } 
-            }
-
-            voiture->tour[t].tempsTotal += tempsSecteur;
-            // printf("the best for auto %d: %ld\n",voiture->numero, tempsSecteur);
-
-            // Met à jour le meilleur temps de secteur
-            if (voiture->tour[t].meilleurTempsSecteur == 0 || tempsSecteur < voiture->tour[t].meilleurTempsSecteur) {
-                printf("the best : %ld\n", tempsSecteur);
-                voiture->tour[t].meilleurTempsSecteur = tempsSecteur;
+                // Mettre à jour le meilleur temps de ce secteur
+                if (voiture->bestSecteur[secteur] == 0 || voiture->secteur[secteur] < voiture->bestSecteur[secteur]) {
+                    voiture->bestSecteur[secteur] = voiture->secteur[secteur];
+                }
+            } else {
+                voiture->secteur[secteur] = 0; // Pas de temps enregistré
             }
         }
 
+        // Ajout du temps d'arrêt au stand s'il y a un arrêt
+        if (voiture->stand == 1) {
+            int pitTime = genererTempsSecteur(MIN_TEMPS_PIT, MAX_TEMPS_PIT, lgSect, lgSectRef);
+            lapTime += pitTime;
+            voiture->stand == 0;
+            voiture->status == 0; //retour dans la course
+        }
+
+        voiture->tempTotal += lapTime; // Mise à jour du temps total
+        //printf("id voidture %d et la e temps total %d\n", voiture->num, voiture->tempTotal);
+
+        // Mise à jour du meilleur tour
+        if (voiture->bestLap == 0 || (voiture->out == 0 && lapTime < voiture->bestLap)) {
+            voiture->bestLap = lapTime;
+        }
+
+        printf("ici c'est la voiture %d qui ecrit, statut V %d\n", voiture->num, voiture->status);
+//////////////////////////////////////////////////////////////////////////////////
+        sem_wait(&mutex); // le red fini 
+        red_count--;// décrémente 
+
+        if(red_count == 0){sem_post(&mutlect);} //si il y a plus de red , le lecteur se réveille
+
+        sem_post(&mutex);  // les red peuvent se réveiller
+
+        sleep(2);
     }
 }
+
+
 
 
 //****** SIMULATION TOURS ET QUALIFICATIONS
 
-void simulateLaps(Voiture *voitures, int nbrVoitures, int timeLimit) {
-    time_t startTime = time(NULL);
 
-    while (time(NULL) - startTime < timeLimit) {
-        for (int i = 0; i < nbrVoitures; i++) {
-            if (voitures[i].meilleurTour.etat != 'O') { // Simule seulement pour les voitures en course
-                simulerVoiture(&voitures[i], MIN_TEMPS_SECTEUR, MAX_TEMPS_SECTEUR, TOTAL_PARC, TOTAL_PARC);
-            }
-        }
+
+void simulateQualification(Voiture *voitures, int nbrVoitures, int *voituresRestantes, int t){
+    *voituresRestantes = nbrVoitures;
+
+    for(int qualif = 0; qualif < 3; qualif ++){
+        printf("Début de D%d...\n", qualif + 1);
+
+        //afficherTableau(voitures, sizeof(Voiture), t);
+
+        if (qualif < 2) elimination(voitures, voituresRestantes);
+
+        printf("Q%d terminé. Voitures restantes : %d\n\n", qualif + 1, *voituresRestantes);
+
+        if (*voituresRestantes <= 10) break;
+        
     }
+
+    printf("Qualification terminée. Classement final établi pour le Grand Prix.\n");
+
 }
 
 
-void simulateQualification(Voiture *voitures, int nbrVoitures) {
-    int voituresRestantes = nbrVoitures;
-
-    // Phase Q1 : Élimination des 5 dernières voitures
-    printf("Début de Q1...\n");
-    simulateLaps(voitures, voituresRestantes, Q1_TIME_LIMIT);
-    printf("Résultats après Q1 :\n");
-    afficherTableau(voitures, voituresRestantes, 0); // Afficher les résultats après Q1
-    elimination(voitures, &voituresRestantes, 5);
-    printf("Q1 terminé. Voitures restantes : %d\n\n", voituresRestantes);
-
-    // Phase Q2 : Élimination des 5 dernières voitures restantes
-    if (voituresRestantes > 0) {
-        printf("Début de Q2...\n");
-        simulateLaps(voitures, voituresRestantes, Q2_TIME_LIMIT);
-        printf("Résultats après Q2 :\n");
-        afficherTableau(voitures, voituresRestantes, 1); // Afficher les résultats après Q2
-        elimination(voitures, &voituresRestantes, 5);
-        printf("Q2 terminé. Voitures restantes : %d\n\n", voituresRestantes);
-    }
-
-    // Phase Q3 : Classement final des 10 meilleures voitures
-    if (voituresRestantes > 0) {
-        printf("Début de Q3...\n");
-        simulateLaps(voitures, voituresRestantes, Q3_TIME_LIMIT);
-        printf("Résultats après Q3 :\n");
-        afficherTableau(voitures, voituresRestantes, 2); // Afficher les résultats après Q3
-        printf("Q3 terminé. Classement final établi pour le Grand Prix.\n");
-    }
-}
 
 //****** MAIN
 
 
-#include "header.h"
-
-// Vérification des tailles maximales permises pour la mémoire partagée
-#define MAX_SHM_SIZE 65536 // Exemple : 64 KB (modifiable selon vos besoins)
-
-void cleanupSharedMemory(int shmid, void *addr) {
-    if (addr != (void *)-1) {
-        shmdt(addr);
-    }
-    if (shmid != -1) {
-        shmctl(shmid, IPC_RMID, NULL);
-    }
-}
 
 int main(int argc, char *argv[]) {
-    printf("\x1b[8;24;110t"); // Définir la taille de la fenêtre du terminal
+
+    printf("\x1b[8;24;110t"); //PAS SUPPRIMER!!! defini la taille de la fenetre du terminal
+
+////////////////////// SEMAPHORE
+
+    sem_init(&mutex, 0, 1);    // Mutex pour protéger la section critique
+    sem_init(&mutlect, 0, 1);  // Mutex pour contrôler l'accès exclusif en écriture
+
+//////////////////// arguments
 
     if (argc < 7) {
         printf("Usage: %s --type <essaie|qualif> --longueur <longueur_circuit> --jour <jour>\n", argv[0]);
@@ -162,39 +170,33 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+///////////////////////// INITIALISATION
+
     // Déterminer le nombre de voitures
     int nbrVoitures = (strcmp(type_course, "qualif") == 0) ? 20 : 5;
 
     printf("Configuration : Type de course = %s, Longueur du circuit = %d, Jour = %s\n",
            type_course, longueur_circuit, jour);
 
-    // Calculer la taille nécessaire pour la mémoire partagée
-    size_t pageSize = sysconf(_SC_PAGESIZE);
-    size_t tailleVoitures = ((NBR_TOUR * NBR_VOITURES_MAX * sizeof(Voiture) + pageSize - 1) / pageSize) * pageSize;
-
-    printf("Taille mémoire alignée demandée : %zu octets\n", tailleVoitures);
-
     key_t key = ftok("f1", 1); // Générer une clé unique
     if (key == -1) {
         perror("Erreur de génération de la clé mémoire partagée");
         return EXIT_FAILURE;
     }
-
-    int shmid = shmget(key, tailleVoitures, IPC_CREAT | 0666);
+    // Création de la mémoire partagée pour les voitures
+    int shmid = shmget(key, NBR_VOITURES * sizeof(Voiture), IPC_CREAT | 0666);
     if (shmid == -1) {
         perror("Erreur de création de la mémoire partagée pour les voitures");
         return EXIT_FAILURE;
     }
 
-    Voiture *shm = (Voiture *)shmat(shmid, NULL, 0);
+    Voiture *shm = (Voiture *)shmat(shmid, NULL, 0); //atatchement de la memoire au père
     if (shm == (void *)-1) {
         perror("Erreur d'attachement à la mémoire partagée pour les voitures");
-        cleanupSharedMemory(shmid, NULL);
         return EXIT_FAILURE;
     }
 
-    // Initialiser les voitures dans la mémoire partagée
-    initialiserVoitures(shm, nbrVoitures);
+////////////////////// INIT BEST
 
     key_t keyBest = ftok("f1_best", 1);
     if (keyBest == -1) {
@@ -202,60 +204,121 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
     }
 
-    size_t tailleBest = ((sizeof(Best) + pageSize - 1) / pageSize) * pageSize;
-
-    printf("Clé mémoire partagée pour les meilleurs temps : %d\n", keyBest);
-    printf("Taille alignée demandée pour Best : %zu octets\n", tailleBest);
-
-    int shmidBest = shmget(keyBest, tailleBest, IPC_CREAT | 0666);
+    // Création de la mémoire partagée pour les meilleurs temps
+    int shmidBest = shmget(keyBest, sizeof(Best), IPC_CREAT | 0666);
     if (shmidBest == -1) {
         perror("Erreur de création de la mémoire partagée pour les meilleurs temps");
+        shmdt(shm);
+        shmctl(shmid, IPC_RMID, NULL);
         return EXIT_FAILURE;
     }
 
     Best *madame = (Best *)shmat(shmidBest, NULL, 0);
     if (madame == (void *)-1) {
         perror("Erreur d'attachement à la mémoire partagée pour les meilleurs temps");
-        shmctl(shmidBest, IPC_RMID, NULL); // Nettoyer si nécessaire
+        shmdt(shm);
+        shmctl(shmid, IPC_RMID, NULL);
         return EXIT_FAILURE;
     }
+    
+
+    initialiserVoitures(shm, nbrVoitures);
+///////////////////////////////// VARIABLES
 
     srand(time(NULL));
+    int vId = 0;
+    pid_t pid ;
+    int voituresRestantes;
 
-    // Simulation en fonction du type de course
-    for (int vId = 0; vId < nbrVoitures; vId++) {
-        pid_t pid = fork();
-        if (pid == 0) { // Processus enfant
-            printf("Processus enfant créé pour la voiture %d (PID: %d)\n", vId, getpid());
-            srand(time(NULL) ^ getpid());
+
+
+////////////////////////////// FORK VOITURES REDACETEUR
+
+    for (vId = 0; vId < nbrVoitures; vId++) {
+        pid = fork();
+        
+        if (pid == 0) {  // Processus fils (voiture)
+            // Initialisation du générateur aléatoire pour ce processus fils
+            srand(time(NULL) ^ getpid());  
+
+            // Obtenir un pointeur vers la voiture correspondante dans la mémoire partagée
             Voiture *voiture = &shm[vId];
             simulerVoiture(voiture, MIN_TEMPS_SECTEUR, MAX_TEMPS_SECTEUR, TOTAL_PARC, TOTAL_PARC);
-            _exit(0);
+
+            _exit(0);  // Terminer le processus fils proprement
+        } 
+        else if (pid < 0) {  // Gestion d'une erreur de fork
+            perror("Erreur lors du fork");
+            return EXIT_FAILURE;
         }
     }
 
-    for (int i = 0; i < nbrVoitures; i++) {
-        wait(NULL); // Attendre la fin des processus enfants
-    }
+//parking
 
-    Voiture copie[NBR_VOITURES];
-    memcpy(copie, shm, sizeof(Voiture) * NBR_VOITURES);
+/////////////////// PERE LECTEUR
 
-    if (strcmp(type_course, "essaie") == 0) {
-        printf("Début des essais libres...\n");
+    if (pid > 0) {
+
         while (1) {
-            for (int t = 0; t < NBR_TOUR; t++) {
-                afficherTableau(copie, NBR_VOITURES, t);
-                sleep(2);
+
+           sem_wait(&mutlect);  // Attendre qu'il n'y ait pas d'écrivain actif
+
+////////////////////////////////////////////////
+//SECTION CRITIQUE
+            Voiture copie[NBR_VOITURES];
+            memcpy(copie, shm, sizeof(Voiture)*NBR_VOITURES);
+
+            if (strcmp(type_course, "essaie") == 0) {
+                    printf("Début des essais libres...\n");
+
+                    afficherTableau(copie, nbrVoitures);             
             }
+
+            memset(copie, 0, sizeof(Voiture) * NBR_VOITURES); // Remettre à zéro les données de voiture
+
+
+
+
+
+
+
+
+////////////////////////////////////////////////
+            sem_post(&mutlect);  // Permettre à une voiture d'écrire à nouveau
+
+            sleep(1);  // Le père attend un peu avant de lire à nouveau
         }
-    } else if (strcmp(type_course, "qualif") == 0) {
-        printf("Début des qualifications...\n");
     }
+
+
+    /* } else if (strcmp(type_course, "qualif") == 0) {
+                printf("Début des qualifications...\n");
+                while(1){
+                for (int t = 0; t < NBR_TOUR; t++){
+        
+                    
+                        simulateQualification(copie, nbrVoitures, &voituresRestantes, t); // Effectuer la simulation
+                        sleep(2); 
+
+        }
+             
+    }
+*/
+
+    memset(shm, 0, sizeof(Voiture) * NBR_VOITURES); // Remettre à zéro les données de voiture
 
     // Détachement et suppression de la mémoire partagée
-    cleanupSharedMemory(shmid, shm);
-    cleanupSharedMemory(shmidBest, madame);
+    shmdt(shm);
+    shmctl(shmid, IPC_RMID, NULL);
 
+    shmdt(madame);
+    shmctl(keyBest, IPC_RMID, NULL);
+
+    sem_close(&mutex);
+    sem_close(&mutlect);
+
+    sem_unlink("/mutex");
+    sem_unlink("/mutlect");
     return EXIT_SUCCESS;
 }
+

@@ -3,6 +3,36 @@
  #include "header.h" //appel pour utiliser mon deuxieme fichier 
 
 
+
+
+
+//****** UTILITAIRES
+
+long getMin(long a, long b, long c) {
+    long min = a;
+    if (b < min) min = b;
+    if (c < min) min = c;
+    return min;
+}
+
+//****** FONCTION TEMPS
+
+long genererTempsSecteur(int min, int max, int longueurSecteur, int longueurSecteurRef) {
+    int tempsBase = min + rand() % (max - min + 1);
+    return (long)tempsBase * longueurSecteur / longueurSecteurRef;
+}
+
+//****** FONCTION ETATS VOITURES
+
+char genererEtatVoiture() {
+    int random = rand() % 100;
+    if (random < 15) return 'O';
+    if (random < 25) return 'P';
+    return 'R';
+}
+
+
+
 void enregistrerData(char *cell, char *nomFich){
     
     
@@ -58,83 +88,95 @@ char* intToChar_deux(int nombre){
     return var;
 }
 
-int comparerVoituresParTour(const void *a, const void *b, void *contexte) {
-    const ContexteTri *ctx = (const ContexteTri *)contexte;
-    const Voiture *voitureA = (const Voiture *)a;
-    const Voiture *voitureB = (const Voiture *)b;
 
-    int t = ctx->tour; // Récupération du numéro du tour
-    return voitureA->tour[t].tempsTotal - voitureB->tour[t].tempsTotal;
-}
+
+
+
+
 
 
 void ajouterEnTetesCSV(char *nomFichier) {
     enregistrerData(";Voiture; Tour; TempsTour; MeilleurSecteur; Secteur 1; Secteur 2; Secteur 3;\n", nomFichier);
 }
 
-void elimination(Voiture *voitures, int *nbrVoitures, int eliminations) {
-    // Limitez les éliminations au nombre de voitures restantes
-    if (eliminations > *nbrVoitures) {
-        eliminations = *nbrVoitures;
-    }
+int comparerVoituresParTour(const void *a, const void *b) {
+    // ContexteTri n'est plus nécessaire car `tour` est directement utilisé dans chaque voiture
+    const Voiture *voitureA = (const Voiture *)a;
+    const Voiture *voitureB = (const Voiture *)b;
 
-    // Tri des voitures par leur temps total (meilleurs temps en haut)
-    for (int i = 0; i < *nbrVoitures - 1; i++) {
-        for (int j = i + 1; j < *nbrVoitures; j++) {
-            if (voitures[i].meilleurTour.tempsTotal > voitures[j].meilleurTour.tempsTotal) {
-                Voiture temp = voitures[i];
-                voitures[i] = voitures[j];
-                voitures[j] = temp;
+    // Comparer les temps totaux
+    return voitureA->tempTotal - voitureB->tempTotal;
+}
+
+
+
+void elimination(Voiture *voitures, int *nbVoitures) {
+    // Trier les voitures par temps total (croissant) en utilisant un tri à bulles
+    for (int i = 0; i < *nbVoitures - 1; i++) {
+        for (int j = 0; j < *nbVoitures - i - 1; j++) {
+            if (voitures[j].tempTotal > voitures[j + 1].tempTotal) {
+                // Échanger les voitures
+                Voiture temp = voitures[j];
+                voitures[j] = voitures[j + 1];
+                voitures[j + 1] = temp;
             }
         }
     }
 
-    // Marquez les voitures éliminées comme "Out" (état = 'O')
-    for (int i = *nbrVoitures - eliminations; i < *nbrVoitures; i++) {
-        voitures[i].meilleurTour.etat = 'O';  // Out
-    }
-
-    // Réduisez le nombre de voitures restantes
-    *nbrVoitures -= eliminations;
-
-    // Assurez-vous que nbrVoitures ne devienne pas négatif
-    if (*nbrVoitures < 0) {
-        *nbrVoitures = 0;
-    }
+    // Réduire le nombre de voitures restantes après l'élimination
+    *nbVoitures = (*nbVoitures > 5) ? *nbVoitures - 5 : 0;
 }
 
-void afficherTableau(Voiture *copie, int nbVoitures, int t) {
-    system("clear");
+void afficherTableau(Voiture *copie, int nbVoitures) {
+    //system("clear");
 
-    // Préparer le contexte pour le tri
-    ContexteTri contexte = {copie, t};
-
-    // Trier les voitures en fonction du temps total pour le tour `t`
-    qsort_r(copie, nbVoitures, sizeof(Voiture), comparerVoituresParTour, &contexte);
+    qsort(copie, nbVoitures, sizeof(Voiture), comparerVoituresParTour);
 
     // Identifier le leader pour les écarts
-    long tempsLeader = copie[0].tour[t].tempsTotal;
+    int tempsLeader = copie[0].tempTotal;
 
     // Affichage du tableau
-    printf("╔════╦═══════════╦════════╦═════════════╦══════════════════╦═══════╦════════════════╗\n");
-    printf("║Rang║ Nom       ║ Numéro ║ Temps Total ║ Meilleur Secteur ║ État  ║ Écart de temps ║\n");
-    printf("╠════╬═══════════╬════════╬═════════════╬══════════════════╬═══════╬════════════════╣\n");
+    printf("╔════╦═══════════╦════════╦═════════════╦══════════════════╦════════╦════════════════╗\n");
+    printf("║Rang║ Numéro    ║ Tour   ║ Temps Total ║ Meilleur Secteur ║  État  ║ Écart de temps ║\n");
+    printf("╠════╬═══════════╬════════╬═════════════╬══════════════════╬════════╬════════════════╣\n");
 
     for (int i = 0; i < nbVoitures; i++) {
-        char *tempsTotalStr = convertiTemps(copie[i].tour[t].tempsTotal);
-        char *meilleurSecteurStr = convertiTemps(copie[i].tour[t].meilleurTempsSecteur);
-        long ecartTemps = copie[i].tour[t].tempsTotal - tempsLeader;
+        // Convertir les temps pour l'affichage
+        char *tempsTotalStr = convertiTemps(copie[i].tempTotal);
+        char *meilleurSecteurStr = convertiTemps(
+            copie[i].bestSecteur[0] < copie[i].bestSecteur[1] && copie[i].bestSecteur[0] < copie[i].bestSecteur[2]
+            ? copie[i].bestSecteur[0]
+            : (copie[i].bestSecteur[1] < copie[i].bestSecteur[2]
+               ? copie[i].bestSecteur[1]
+               : copie[i].bestSecteur[2]));
+
+        int ecartTemps = copie[i].tempTotal - tempsLeader;
         char *ecartStr = convertiTemps(ecartTemps);
 
-        // Affichage de chaque ligne
-        printf( "║ %2d ║ %-9s ║ %6d ║ %11s ║ %16s ║   %s%1c%s   ║ %s      ║\n",
-                i + 1,
-                copie[i].nom,
-                copie[i].numero,
-                tempsTotalStr,
-                meilleurSecteurStr,
-                VERT, copie[i].tour[t].etat, RESET,
-                ecartStr);
+        char *etatStr;
+            switch (copie[i].status) {
+                case 0:
+                    etatStr = "RUN";
+                    break;
+                case 1:
+                    etatStr = "PIT";
+                    break;
+                case 2:
+                    etatStr = "OUT";
+                    break;
+                default:
+                    etatStr = "IDK";
+            }
+
+
+        printf("║ %2d ║ %-9d ║ %6d ║ %11s ║ %16s ║ %-6s ║ %12s ║\n",
+               i + 1,
+               copie[i].num,
+               copie[i].tour,
+               tempsTotalStr,
+               meilleurSecteurStr,
+               etatStr,
+               ecartStr);
 
         // Libération de mémoire
         free(tempsTotalStr);
@@ -142,22 +184,30 @@ void afficherTableau(Voiture *copie, int nbVoitures, int t) {
         free(ecartStr);
     }
 
-    printf("╚════╩═══════════╩════════╩═════════════╩══════════════════╩═══════╩════════════════╝\n");
+    printf("╚════╩═══════════╩════════╩═════════════╩══════════════════╩════════╩════════════════╝\n");
+
 }
 
 
+
+
+
 void sauvegarderResultatsQualification(Voiture *voitures, int nbrVoitures, char *nomFichier) {
+    // Ajouter les en-têtes au fichier CSV
     ajouterEnTetesCSV(nomFichier);
 
+    // Sauvegarder les données des voitures
     for (int i = 0; i < nbrVoitures; i++) {
-        char data[128];
-        sprintf(data, "%d;%s;%ld;%ld;%ld;%ld\n",
-                i + 1,  // Position
-                voitures[i].nom,
-                voitures[i].meilleurTour.tempsTotal,
-                voitures[i].tour[0].secteur1.temps,
-                voitures[i].tour[0].secteur2.temps,
-                voitures[i].tour[0].secteur3.temps);
+        char data[256];
+        sprintf(data, "%d;%d;%d;%d;%d;%d;%d;%d\n",
+                i + 1,                        // Position
+                voitures[i].num,              // Numéro de la voiture
+                voitures[i].tempTotal,        // Temps total de la voiture
+                voitures[i].secteur[0],       // Temps secteur 1
+                voitures[i].secteur[1],       // Temps secteur 2
+                voitures[i].secteur[2],       // Temps secteur 3
+                voitures[i].bestLap,          // Meilleur temps au tour
+                voitures[i].status);          // Statut de la voiture
         enregistrerData(data, nomFichier);
     }
 }
@@ -165,18 +215,10 @@ void sauvegarderResultatsQualification(Voiture *voitures, int nbrVoitures, char 
 
 void initialiserVoitures(Voiture *voitures, int nbrVoitures) {
     int numeros[] = {1, 55, 16, 44, 4, 7, 63, 11, 14, 31, 18, 22, 20, 23, 24, 10, 27, 21, 77, 81};
-    const char *noms[] = {
-        "Max", "Carlos", "Charles", "Lewis", "Lando", "Kimi", "George", "Sergio",
-        "Fernando", "Esteban", "Sebastian", "Daniel", "Pierre", "Alex", "Yuki",
-        "Nico", "Kevin", "Liam", "Mick", "Logan"
-    };
 
     for (int i = 0; i < nbrVoitures; i++) {
-        voitures[i].numero = numeros[i];
-        strncpy(voitures[i].nom, noms[i], sizeof(voitures[i].nom) - 1);
-        voitures[i].nom[sizeof(voitures[i].nom) - 1] = '\0';
+        // Initialisation des numéros
+        voitures[i].num = numeros[i];
 
     }
-
-    
 }

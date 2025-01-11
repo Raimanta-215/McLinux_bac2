@@ -21,24 +21,24 @@
 
 
 
+
+
 //****CONSTANTES
 
-#define NBR_VOITURES 5     // Nombre de voitures dans la course
-#define NBR_TOUR 10       // Nombre de tours dans la course
+#define NBR_VOITURES 10    // Nombre de voitures dans la course
+#define NBR_TOUR 10  // Nombre de tours dans la course
 #define MIN_TEMPS_SECTEUR 25000  // Temps minimum pour un secteur en millisecondes
 #define MAX_TEMPS_SECTEUR 45000
-#define MIN_TEMPS_PIT 2000 
-#define MAX_TEMPS_PIT 8000
-
 #define TOUR_MAX MAX_TEMPS_SECTEUR*3 // Temps maximum pour un secteur en millisecondes
 #define TOTAL_PARC 305000        // Longueur totale du circuit
 #define NOM_FICHIER "essaie-libre.csv"
 #define MAX_TOURS 10  // Nombre maximal de tours
-#define SHM_KEY_BEST 2121
-#define SEM_KEY 54321
+#define SEM_KEY 5432
 #define NBR_VOITURES_MAX 20 // Capacité maximale pour les qualifications
 
-
+#define MIN_TEMPS_PIT 2000 
+#define MAX_TEMPS_PIT 8000
+#define FINALTOURS 45
 //qualif
 #define Q1_TIME_LIMIT 10 //1080  // 18 minutes
 #define Q2_TIME_LIMIT  5 //900   // 15 minutes
@@ -56,34 +56,18 @@
 //*****STRUCTURES
 
 // Structure pour stocker le temps d'un secteur
-typedef struct {
-    long temps;  // Temps en millisecondes pour le secteur
-} Secteur;
-
-// Structure pour stocker les informations de chaque tour
-typedef struct {
-    Secteur secteur1;            // Temps pour le secteur 1
-    Secteur secteur2;            // Temps pour le secteur 2
-    Secteur secteur3;            // Temps pour le secteur 3
-    long tempsTotal;             // Temps total pour le tour (somme des trois secteurs)
-    long meilleurTempsSecteur;   // Temps le plus rapide parmi les trois secteurs
-    char etat;                   // État de la voiture pour ce tour : 'R' (En course), 'P' (Aux stands), 'O' (Abandon)
-} Tour;
-
-// Structure pour stocker les informations de chaque voiture
-typedef struct {
-    int numero;
-    char nom[20];                    // Nom de la voiture (ex : 'A', 'B', 'C', ...)
-    Tour tour[NBR_TOUR];         // Tableau de tours pour stocker les informations de chaque tour
-    Tour meilleurTour;              // Informations du meilleur tour
-
-} Voiture;
-
-
-typedef struct {
-    Voiture *voitures;
-    int tour; // Numéro du tour à utiliser pour le tri
-} ContexteTri;
+typedef struct voiture{
+    int status;             //status de la voiture : 0 = enCourse, 1 = stand , 2 =crach
+    int num;     
+    int secteur[3];         //Chaque Secteur
+    int bestSecteur[3];     //Best temps pour chaque secteur (n° = index+1)
+    int bestLap;            //Best Lap
+    int tempTotal;          //Temps de course
+    int tour;               //Numéro du tour actuel
+    int stand;              //1 = au stand
+    int out;                //1 = crach
+    int probaStand;         //Probabilité d'un arrèt au stand
+}Voiture;
 
 
 typedef struct {
@@ -98,21 +82,17 @@ typedef struct {
 
 struct sembuf sem_signal_op = {0, 1, SEM_UNDO};*/
 
+
+
 //*****DEFINITION FONCTIONS
 
 //F1.c
 long getMin(long a, long b, long c);
 long genererTempsSecteur(int min, int max, int longueurSecteur, int longueurSecteurRef);
-//long calculeEcart(Voiture voitures[], int rang);
 char genererEtatVoiture();
-int comparerVoitures(const void *a, const void *b);
 void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSectRef);
-/*void afficherTemps(int tempsEnMs);
-void afficherEcartTemps(long ecartTemps);
-void afficherResultats(Voiture voitures[], int nbrVoitures);
-void afficherMeilleurTemps(Voiture *voitures, int *meilleursTemps, sem_t *sem, int nombreDeTours, int *flags);// Dans header.h
-void mettreAJourMeilleursTemps(Best madame, Voiture *voiture, int semid);
-void afficherResultatsTempsReel(Best madame);*/
+void simulateQualification(Voiture *voitures, int nbrVoitures, int *voituresRestantes, int t);
+
 
 
 
@@ -122,14 +102,15 @@ char *convertiTemps(int tempsEnMms);
 char* intToChar_deux(int nombre);
 //void enregistrerTourVoiture(Voiture *voiture, int tourNum, char *nomFichier);
 void ajouterEnTetesCSV(char *nomFichier);
-void afficherTableau(Voiture *copie, int nbVoitures,int t);
+void afficherTableau(Voiture *copie, int nbVoitures);
 void initialiserVoitures(Voiture *voitures, int nbrVoitures);
 
 //void trierVoituresParTemps(Voiture *copie);
 void youTheBest(Voiture *voitures);
 
-void elimination(Voiture *voitures, int *nbrVoitures, int eliminations);
+void elimination(Voiture *voitures, int *nbrVoitures);
 void sauvegarderResultatsQualification(Voiture *voitures, int nbrVoitures, char *nomFichier);
+int comparerVoituresParTour(const void *a, const void *b);
 
 
 
