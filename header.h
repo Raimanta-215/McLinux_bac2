@@ -45,6 +45,9 @@
 #define NBR_ELIMINATIONS_Q1 5
 #define NBR_ELIMINATIONS_Q2 5
 
+#define TEMPS_COURSE 10
+
+
 //couleurs
 #define ROUGE     "\x1b[31m"
 #define VERT      "\x1b[32m"
@@ -101,7 +104,7 @@ char *convertiTemps(int tempsEnMms);
 char* intToChar_deux(int nombre);
 //void enregistrerTourVoiture(Voiture *voiture, int tourNum, char *nomFichier);
 void ajouterEnTetesCSV(char *nomFichier);
-void afficherTableau(Voiture *voiture, int nbVoitures);
+void afficherTableau(Voiture *voiture, int nbVoitures, sem_t *mutlect);
 void initialiserVoitures(Voiture *voitures, int nbrVoitures);
 
 //void trierVoituresParTemps(Voiture *copie);

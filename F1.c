@@ -8,7 +8,6 @@
 
 sem_t mutex;            // Pour synchroniser l'accès à la sortie
 sem_t mutlect;          // Pour indiquer si une voiture écrit
-#define TEMPS_COURSE 600
 int red_count = 0;  // Nombre de lecteurs en cours
 
 void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSectRef) {
@@ -26,7 +25,7 @@ void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSect
         voiture->bestSecteur[i] = 0;
     }
       
-    while(1){ //tant que la voiture a pas fini son temsps de course
+    while(voiture->tempTotal < TEMPS_COURSE*100500){ //tant que la voiture a pas fini son temsps de course
         
         sem_wait(&mutex); //les red attendent que le père lise pas
         
@@ -46,7 +45,7 @@ void simulerVoiture(Voiture *voiture, int minT, int maxT, int lgSect, int lgSect
         voiture->tour=voiture->tour+1; // Mise à jour du tour actuel
 
         // Déterminer le statut de la voiture
-        if (random < 7 || (voiture->tour > 0 && voiture->out == 1)) {
+        if (random < 2 || (voiture->tour > 0 && voiture->out == 1)) {
             voiture->status = 2; // Crash
             voiture->out = 1;
         } else if (random < 25) {
@@ -281,7 +280,7 @@ if (shmId == -1) {
 
 
 
-           sem_wait(&mutlect);  // Attendre qu'il n'y ait pas d'écrivain actif
+           //sem_wait(&mutlect);  // Attendre qu'il n'y ait pas d'écrivain actif
 
 ////////////////////////////////////////////////
 //SECTION CRITIQUE
@@ -289,11 +288,11 @@ if (shmId == -1) {
             if (strcmp(type_course, "essaie") == 0) {
                 printf("Début des essais libres...\n");
                 time_t start = time(NULL);
-                time_t finish = start + 5;
+                time_t finish = start + 13;
                 while (time(NULL) < finish) {
 
-                    afficherTableau(shm, NBR_VOITURES);   
-
+                    afficherTableau(shm, NBR_VOITURES,&mutlect);  
+                    
                 sleep(1);          
             }
 
@@ -304,7 +303,7 @@ if (shmId == -1) {
 
 
 ////////////////////////////////////////////////
-            sem_post(&mutlect);  // Permettre à une voiture d'écrire à nouveau
+            //sem_post(&mutlect);  // Permettre à une voiture d'écrire à nouveau
 
             sleep(1);  // Le père attend un peu avant de lire à nouveau
         }
